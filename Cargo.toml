@@ -2,7 +2,7 @@
 name = "rustfs-rsc"
 description = "rust for minio, api is compliant with the Amazon S3 protocol."
 keywords = ["rustfs","minio", "s3", "tokio"]
-version = "2025.220.1"
+version = "2025.220.2"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/lygn128/rustfs-rsc.git"
