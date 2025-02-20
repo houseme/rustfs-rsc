@@ -1,11 +1,11 @@
 [package]
-name = "minio-rsc"
+name = "rustfs-rsc"
 description = "rust for minio, api is compliant with the Amazon S3 protocol."
-keywords = ["minio", "s3", "tokio"]
+keywords = ["rustfs","minio", "s3", "tokio"]
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://gitee.com/krealseu/minio-rsc"
+repository = "https://github.com/lygn128/rustfs-rsc.git"
 readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
