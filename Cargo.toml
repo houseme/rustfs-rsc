@@ -2,7 +2,7 @@
 name = "rustfs-rsc"
 description = "rust for minio, api is compliant with the Amazon S3 protocol."
 keywords = ["rustfs","minio", "s3", "tokio"]
-version = "2025.220.2"
+version = "2025.220.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/lygn128/rustfs-rsc.git"
@@ -11,7 +11,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "rustfs_rsc"
+name = "rustfs-rsc"
 path = "src/lib.rs"
 
 [dependencies]
