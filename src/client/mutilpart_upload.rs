@@ -63,6 +63,42 @@ impl Minio {
             .send_xml_ok()
             .await
     }
+    
+    //
+    pub async fn create_multipart_upload_with_versionid<B, K>(
+        &self,
+        bucket: B,
+        key: K,
+        version_id: String,
+    ) -> Result<MultipartUploadTask>
+    where
+        B: Into<BucketArgs>,
+        K: Into<KeyArgs>,
+    {
+        let bucket: BucketArgs = bucket.into();
+        let key: KeyArgs = key.into();
+        let metadata_header: HeaderMap = key.get_metadata_header()?;
+        let expected_bucket_owner = bucket.expected_bucket_owner.clone();
+        let mut result: MultipartUploadTask = self
+            ._bucket_executor(bucket, Method::POST)
+            .object_name(key.name.as_str())
+            .query_string("uploads")
+            .query("versionId", version_id)
+            .header(
+                header::CONTENT_TYPE,
+                &key.content_type
+                    .map_or("binary/octet-stream".to_string(), |f| f),
+            )
+            .headers_merge(metadata_header)
+            .headers_merge2(key.extra_headers)
+            .headers_merge2(key.ssec_headers.clone())
+            .send_xml_ok::<InitiateMultipartUploadResult>()
+            .await
+            .map(Into::into)?;
+        result.set_ssec_header(key.ssec_headers);
+        result.set_bucket_owner(expected_bucket_owner);
+        Ok(result)
+    }
 
     /// This action initiates a multipart upload and returns an MultipartUploadArgs.
     pub async fn create_multipart_upload<B, K>(
