@@ -34,6 +34,12 @@ impl_xmlself!(
     ListPartsResult
     ListAllMyBucketsResult
     ListBucketResult
+    ListVersionsResult
+    ServerSideEncryptionConfiguration
+    CORSConfiguration
+    LocationConstraint
+    PublicAccessBlockConfiguration
+    AccessControlPolicy
 );
 
 pub trait ToXml {
@@ -73,6 +79,22 @@ impl Region {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
+pub struct AccessControlList {
+    pub grant: Vec<Grant>,
+}
+
+/// Contains the elements that set the ACL permissions for an object per grantee.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct AccessControlPolicy {
+    pub access_control_list: AccessControlList,
+    pub owner: Option<Owner>,
+}
+
+/// In terms of implementation, a Bucket is a resource.
+/// An Amazon S3 bucket name is globally unique, and the namespace is shared by all AWS accounts.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct Bucket {
     /// The name of the bucket.
     pub name: String,
@@ -94,10 +116,11 @@ pub struct CommonPrefix {
     pub prefix: String,
 }
 
+/// The container for the completed multipart upload details.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct CompleteMultipartUpload {
-    #[serde(default, rename="Part")]
+    #[serde(default, rename = "Part")]
     pub parts: Vec<Part>,
 }
 
@@ -116,6 +139,33 @@ pub struct CopyPartResult {
     pub e_tag: String,
 }
 
+/// Describes the cross-origin access configuration for objects in an Amazon S3 bucket.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CORSConfiguration {
+    #[serde(rename = "CORSRule")]
+    pub rules: Vec<CORSRule>,
+}
+
+/// Specifies a cross-origin access rule for an Amazon S3 bucket.
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct CORSRule {
+    /// **Required**. Valid values are `GET`, `PUT`, `HEAD`, `POST`, and `DELETE`.
+    #[serde(rename = "AllowedMethod", default)]
+    pub allowed_methods: Vec<String>,
+    /// **Required**
+    #[serde(rename = "AllowedOrigin", default)]
+    pub allowed_origins: Vec<String>,
+    #[serde(rename = "AllowedHeader", default)]
+    pub allowed_headers: Vec<String>,
+    #[serde(rename = "ExposeHeader", default)]
+    pub expose_headers: Vec<String>,
+    #[serde(rename = "ID")]
+    pub id: Option<String>,
+    pub max_age_seconds: usize,
+}
+
 /// The container element for specifying the default Object Lock retention settings
 /// for new objects placed in the specified bucket.
 ///
@@ -129,6 +179,42 @@ pub struct DefaultRetention {
     pub days: Option<usize>,
     pub mode: RetentionMode,
     pub years: Option<usize>,
+}
+
+/// Information about the delete marker.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DeleteMarkerEntry {
+    /// The object key.
+    pub key: String,
+    /// Date and time when the object was last modified.
+    pub last_modified: String,
+    /// Specifies whether the object is (true) or is not (false) the latest version of an object.
+    pub is_latest: bool,
+    /// The entity tag is an MD5 hash of that version of the object.
+    pub owner: Option<Owner>,
+    /// Version ID of an object.
+    pub version_id: Option<String>,
+}
+
+/// Container for grant information.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Grant {
+    pub grantee: Option<Grantee>,
+    pub permission: Option<Permission>,
+}
+
+/// Container for the person being granted permissions.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Grantee {
+    pub display_name: Option<String>,
+    pub email_address: Option<String>,
+    pub id: Option<String>,
+    #[serde(alias = "Type", alias = "type")]
+    pub r#type: GranteeType,
+    pub uri: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -221,6 +307,55 @@ pub struct ListPartsResult {
     pub owner: Owner,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ListVersionsResult {
+    /// A flag that indicates whether Amazon S3 returned all of the results
+    /// that satisfied the search criteria. If your results were truncated,
+    /// you can make a follow-up paginated request by using the `NextKeyMarker`
+    /// and `NextVersionIdMarker` response parameters as a starting place in
+    /// another request to return the rest of the results.
+    pub is_truncated: bool,
+    /// All of the keys rolled up into a common prefix count as a single return when calculating the number of returns.
+    #[serde(default)]
+    pub common_prefixes: Vec<CommonPrefix>,
+    #[serde(default, rename = "Version")]
+    pub versions: Vec<ObjectVersion>,
+    /// Container for an object that is a delete marker.
+    #[serde(default, rename = "DeleteMarker")]
+    pub delete_markers: Vec<DeleteMarkerEntry>,
+    pub name: String,
+    pub prefix: String,
+    pub max_keys: usize,
+    #[serde(default)]
+    pub delimiter: String,
+    pub encoding_type: Option<String>,
+    /// Marks the last key returned in a truncated response.
+    #[serde(default)]
+    pub key_marker: String,
+    /// When the number of responses exceeds the value of `MaxKeys`,
+    /// `NextKeyMarker` specifies the first key not returned that
+    /// satisfies the search criteria. Use this value for the `key-marker`
+    /// request parameter in a subsequent request.
+    #[serde(default)]
+    pub next_key_marker: String,
+    /// Marks the last version of the key returned in a truncated response.
+    #[serde(default)]
+    pub version_id_marker: String,
+    /// When the number of responses exceeds the value of `MaxKeys`,
+    /// `NextVersionIdMarker` specifies the first object version not
+    /// returned that satisfies the search criteria. Use this value
+    /// for the `version-id-marker` request parameter in a subsequent request.
+    #[serde(default)]
+    pub next_version_id_marker: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LocationConstraint {
+    pub location_constraint: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct MultipartUpload {
@@ -265,6 +400,24 @@ pub struct ObjectLockConfiguration {
     pub rule: Option<ObjectLockRule>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ObjectVersion {
+    /// The object key.
+    pub key: String,
+    /// Date and time when the object was last modified.
+    pub last_modified: String,
+    /// Specifies whether the object is (true) or is not (false) the latest version of an object.
+    pub is_latest: bool,
+    /// The entity tag is an MD5 hash of that version of the object.
+    pub e_tag: String,
+    pub size: u64,
+    pub storage_class: String,
+    pub owner: Option<Owner>,
+    /// Version ID of an object.
+    pub version_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Owner {
@@ -289,6 +442,16 @@ pub struct Progress {
     pub bytes_scanned: u64,
 }
 
+/// PublicAccessBlockConfiguration parameters
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PublicAccessBlockConfiguration {
+    pub block_public_acls: bool,
+    pub block_public_policy: bool,
+    pub ignore_public_acls: bool,
+    pub restrict_public_buckets: bool,
+}
+
 /// A container for replication rules. You can add up to 1,000 rules. The maximum size of a replication configuration is 2 MB.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -298,10 +461,13 @@ pub struct ReplicationConfiguration {
     pub rules: Vec<ReplicationRule>,
 }
 
+/// Specifies which Amazon S3 objects to replicate and where to store the replicas.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct ReplicationRule {
     pub role: String,
+    pub id: Option<String>,
+    pub priority: Option<i64>,
 }
 
 /// Object representation of request XML of `put_object_retention` API
@@ -314,6 +480,33 @@ pub struct Retention {
     /// The date on which this Object Lock Retention will expire.
     #[serde(deserialize_with = "crate::time::deserialize_with_str")]
     pub retain_until_date: UtcTime,
+}
+
+/// Describes the default server-side encryption to apply to new objects in the bucket.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ServerSideEncryptionByDefault {
+    #[serde(rename = "SSEAlgorithm")]
+    pub ssealgorithm: String,
+    #[serde(rename = " KMSMasterKeyID")]
+    pub kmsmaster_key_id: Option<String>,
+}
+
+/// Root level tag for the ServerSideEncryptionConfiguration parameters
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ServerSideEncryptionConfiguration {
+    #[serde(rename = "Rule")]
+    pub rules: Vec<ServerSideEncryptionRule>,
+}
+
+/// Specifies the default server-side encryption configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ServerSideEncryptionRule {
+    pub apply_server_side_encryption_by_default: ServerSideEncryptionByDefault,
+    #[serde(default)]
+    pub bucket_key_enabled: bool,
 }
 
 /// Container for the stats details.
@@ -375,6 +568,14 @@ pub enum ChecksumAlgorithm {
     SHA256,
 }
 
+/// Type of grantee
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub enum GranteeType {
+    CanonicalUser,
+    AmazonCustomerByEmail,
+    Group,
+}
+
 /// Specifies whether MFA delete is enabled in the bucket versioning configuration.
 /// This element is only returned if the bucket has been configured with MFA delete.
 /// If the bucket has never been so configured, this element is not returned.
@@ -396,6 +597,23 @@ pub enum RetentionMode {
     #[default]
     GOVERNANCE,
     COMPLIANCE,
+}
+
+/// The permission given to the grantee.. Valid Values: `FULL_CONTROL | WRITE | WRITE_ACP | READ | READ_ACP`
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub enum Permission {
+    FULL_CONTROL,
+    WRITE,
+    WRITE_ACP,
+    READ,
+    READ_ACP,
+}
+
+/// Valid Values: `Enabled | Disabled`
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub enum Status {
+    Enabled,
+    Disabled,
 }
 
 /// The versioning state of the bucket.

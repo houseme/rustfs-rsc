@@ -9,6 +9,7 @@ use crate::datatype::{
     InitiateMultipartUploadResult, ListMultipartUploadsResult, ListPartsResult,
 };
 use crate::error::{Result, S3Error, ValueError};
+use crate::signer::{MAX_MULTIPART_COUNT, MAX_PART_SIZE};
 use crate::Minio;
 
 /// Operating multiUpload
@@ -63,8 +64,8 @@ impl Minio {
             .send_xml_ok()
             .await
     }
-    
-    //
+
+
     pub async fn create_multipart_upload_with_versionid<B, K>(
         &self,
         bucket: B,
@@ -183,10 +184,13 @@ impl Minio {
         part_number: usize,
         body: Bytes,
     ) -> Result<Part> {
-        if part_number < 1 || part_number > 10000 {
+        if part_number < 1 || part_number > MAX_MULTIPART_COUNT {
             return Err(ValueError::from(
                 "part_number is a positive integer between 1 and 10,000.",
             ))?;
+        }
+        if body.len() > MAX_PART_SIZE {
+            return Err(ValueError::from("part size must be less then 5GiB."))?;
         }
         let res = self
             .executor(Method::PUT)
@@ -232,7 +236,7 @@ impl Minio {
         part_number: usize,
         copy_source: CopySource,
     ) -> Result<Part> {
-        if part_number < 1 || part_number > 10000 {
+        if part_number < 1 || part_number > MAX_MULTIPART_COUNT {
             return Err(ValueError::from(
                 "part_number is a positive integer between 1 and 10,000.",
             ))?;

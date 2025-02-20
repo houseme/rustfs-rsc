@@ -1,11 +1,13 @@
 use std::fmt::Display;
 
+use super::ToXml;
+
 /// `select_object_content` method parameters.
 #[derive(Clone)]
 pub struct SelectRequest {
     expression: String,
     input_serialization: InputSerialization,
-    output_serialization: OutputSerialization,
+    pub(crate) output_serialization: OutputSerialization,
     request_progress: bool,
     scan_start_range: Option<usize>,
     scan_end_range: Option<usize>,
@@ -41,8 +43,10 @@ impl SelectRequest {
             scan_end_range,
         }
     }
+}
 
-    pub fn to_xml(&self) -> String {
+impl ToXml for SelectRequest {
+    fn to_xml(&self) -> crate::error::Result<String> {
         let expression = &self.expression;
         let progress = self.request_progress;
         let input = &self.input_serialization;
@@ -57,7 +61,7 @@ impl SelectRequest {
         } else {
             "".to_string()
         };
-        format!("<SelectObjectContentRequest><Expression>{expression}</Expression><ExpressionType>SQL</ExpressionType>{input}{output}<RequestProgress><Enabled>{progress}</Enabled></RequestProgress><scanrange>{start}{end}</scanrange></SelectObjectContentRequest>")
+        Ok(format!("<SelectObjectContentRequest><Expression>{expression}</Expression><ExpressionType>SQL</ExpressionType>{input}{output}<RequestProgress><Enabled>{progress}</Enabled></RequestProgress><scanrange>{start}{end}</scanrange></SelectObjectContentRequest>"))
     }
 }
 
@@ -332,7 +336,12 @@ impl CsvOutput {
             record_delimiter,
         }
     }
+
+    pub fn record_delimiter(&self) -> &str {
+        self.record_delimiter.as_str()
+    }
 }
+
 impl Default for CsvOutput {
     /// Default CsvOutput
     /// - field_delimiter: `,`
@@ -361,6 +370,10 @@ impl JsonOutput {
     pub fn new<S: Into<String>>(record_delimiter: S) -> Self {
         Self(record_delimiter.into())
     }
+
+    pub fn record_delimiter(&self) -> &str {
+        self.0.as_str()
+    }
 }
 
 impl Default for JsonOutput {
@@ -385,6 +398,15 @@ impl Display for JsonOutput {
 pub enum OutputSerialization {
     Csv(CsvOutput),
     Json(JsonOutput),
+}
+
+impl OutputSerialization {
+    pub fn record_delimiter(&self) -> &str {
+        match self {
+            OutputSerialization::Csv(csv) => csv.record_delimiter(),
+            OutputSerialization::Json(js) => js.record_delimiter(),
+        }
+    }
 }
 
 impl Display for OutputSerialization {

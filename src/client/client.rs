@@ -5,13 +5,11 @@ use crate::data::Data;
 use crate::error::{Error, Result, ValueError};
 use crate::provider::Provider;
 use crate::signer::sign_request_v4;
-use crate::utils::{check_bucket_name, urlencode};
+use crate::utils::{check_bucket_name, urlencode, _VALID_ENDPOINT};
 use crate::Credentials;
-use async_mutex::Mutex;
 use hyper::{header, header::HeaderValue, HeaderMap};
-use hyper::{Body, Method, Uri};
-use regex::Regex;
-use reqwest::Response;
+use hyper::{Method, Uri};
+use reqwest::{Body, Response};
 
 use super::{Bucket, BucketArgs};
 
@@ -26,7 +24,7 @@ pub struct MinioBuilder {
     secure: bool,
     virtual_hosted: bool,
     multi_chunked_encoding: bool,
-    provider: Option<Box<Mutex<dyn Provider>>>,
+    provider: Option<Box<dyn Provider>>,
     client: Option<reqwest::Client>,
 }
 
@@ -124,14 +122,13 @@ impl MinioBuilder {
     where
         P: Provider + 'static,
     {
-        self.provider = Some(Box::new(Mutex::new(provider)));
+        self.provider = Some(Box::new(provider));
         self
     }
 
     pub fn build(self) -> std::result::Result<Minio, ValueError> {
         let endpoint = self.endpoint.ok_or("Miss endpoint")?;
-        let vaild_rg = Regex::new(r"^[A-Za-z0-9_\-.]+(:\d+)?$").unwrap();
-        if !vaild_rg.is_match(&endpoint) {
+        if !_VALID_ENDPOINT.is_match(&endpoint) {
             return Err("Invalid endpoint".into());
         }
         let provider = self.provider.ok_or("Miss provide")?;
@@ -196,7 +193,7 @@ struct MinioRef {
     client2: reqwest::Client,
     region: String,
     agent: HeaderValue,
-    provider: Box<Mutex<dyn Provider>>,
+    provider: Box<dyn Provider>,
 }
 
 impl Minio {
@@ -220,7 +217,7 @@ impl Minio {
 
     #[inline]
     pub(super) async fn fetch_credentials(&self) -> Credentials {
-        self.inner.provider.lock().await.fetct().await
+        self.inner.provider.fetch().await
     }
 
     /// Execute HTTP request.
@@ -256,20 +253,21 @@ impl Minio {
     /// uriencode(key)
     pub(super) fn _build_uri(&self, bucket: Option<String>, key: Option<String>) -> String {
         let scheme = self.scheme();
-        let key = key.map(|k| urlencode(&k, true));
         let endpoint = self.inner.endpoint.as_str();
-        if self.inner.virtual_hosted {
-            match (bucket, key) {
-                (Some(b), Some(k)) => format!("{scheme}://{b}.{endpoint}/{k}"),
-                (Some(b), None) => format!("{scheme}://{b}.{endpoint}"),
-                _ => format!("{scheme}://{endpoint}"),
+        match bucket {
+            Some(b) => {
+                let mut uri = if self.inner.virtual_hosted {
+                    format!("{scheme}://{b}.{endpoint}")
+                } else {
+                    format!("{scheme}://{endpoint}/{b}",)
+                };
+                if let Some(key) = key {
+                    uri.push('/');
+                    uri.push_str(&urlencode(&key, true));
+                }
+                uri
             }
-        } else {
-            match (bucket, key) {
-                (Some(b), Some(k)) => format!("{scheme}://{endpoint}/{b}/{k}"),
-                (Some(b), None) => format!("{scheme}://{endpoint}/{b}",),
-                _ => format!("{scheme}://{endpoint}"),
-            }
+            None => format!("{scheme}://{endpoint}"),
         }
     }
 
@@ -313,10 +311,10 @@ impl Minio {
         headers.insert(header::USER_AGENT, self.inner.agent.clone());
         let credentials = self.fetch_credentials().await;
         let uri = Uri::from_str(&uri).map_err(|e| Error::ValueError(e.to_string()))?;
-        let (uri, headers, body) = sign_request_v4(
+        let (uri, body) = sign_request_v4(
             &method,
             &uri,
-            headers,
+            &mut headers,
             region,
             data,
             credentials.access_key(),

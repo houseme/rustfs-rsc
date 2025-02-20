@@ -9,7 +9,7 @@ use hyper::{header, HeaderMap, Method};
 use reqwest::Response;
 
 use super::{BucketArgs, CopySource, KeyArgs, ObjectStat, SelectObjectReader, Tags};
-use crate::datatype::{LegalHold, Retention};
+use crate::datatype::{AccessControlPolicy, LegalHold, Retention};
 use crate::datatype::{LegalHoldStatus, SelectRequest};
 use crate::error::{Error, Result, S3Error, ValueError};
 use crate::signer::{MAX_MULTIPART_OBJECT_SIZE, MIN_PART_SIZE};
@@ -34,17 +34,17 @@ impl Minio {
         };
         let executor = self
             ._bucket_executor(bucket, method)
-            .object_name(&key.name)
+            .object_name(key.name)
             .headers_merge2(key.extra_headers)
             .apply(|mut e| {
-                if let Some(version_id) = &key.version_id {
+                if let Some(version_id) = key.version_id {
                     e = e.query("versionId", version_id)
                 }
                 if is_put {
                     e = e.headers_merge(metadata_header);
                 }
                 if with_content_type {
-                    if let Some(content_type) = &key.content_type {
+                    if let Some(content_type) = key.content_type {
                         if is_put {
                             e = e.header(header::CONTENT_TYPE, content_type);
                         } else {
@@ -77,18 +77,17 @@ impl Minio {
     /// # Ok(())
     /// # }
     /// ```
+    #[inline]
     pub async fn copy_object<B, K>(&self, bucket: B, key: K, src: CopySource) -> Result<()>
     where
         B: Into<BucketArgs>,
         K: Into<KeyArgs>,
     {
-        let bucket: BucketArgs = bucket.into();
-        let key: KeyArgs = key.into();
-        self._object_executor(Method::PUT, bucket, key, true, true)?
+        self._object_executor(Method::PUT, bucket.into(), key.into(), true, true)?
             .headers_merge(src.args_headers())
             .send_ok()
-            .await?;
-        Ok(())
+            .await
+            .map(|_| ())
     }
 
     /// Downloads data of an object to file.
@@ -149,8 +148,7 @@ impl Minio {
         let bucket: BucketArgs = bucket.into();
         let key: KeyArgs = key.into();
         let range = key.range();
-        Ok(self
-            ._object_executor(Method::GET, bucket, key, true, true)?
+        self._object_executor(Method::GET, bucket, key, true, true)?
             .apply(|e| {
                 if let Some(range) = range {
                     e.header(header::RANGE, &range)
@@ -159,7 +157,21 @@ impl Minio {
                 }
             })
             .send_ok()
-            .await?)
+            .await
+    }
+
+    /// Get torrent files from a bucket.
+    pub async fn get_object_torrent<B, K>(&self, bucket: B, key: K) -> Result<Response>
+    where
+        B: Into<BucketArgs>,
+        K: Into<KeyArgs>,
+    {
+        let bucket: BucketArgs = bucket.into();
+        let key: KeyArgs = key.into();
+        self._object_executor(Method::GET, bucket, key, true, true)?
+            .query("torrent", "")
+            .send_ok()
+            .await
     }
 
     /// Uploads data to an object in a bucket.
@@ -206,7 +218,7 @@ impl Minio {
         &self,
         bucket: B,
         key: K,
-        mut stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>,
+        mut stream: Pin<Box<dyn Stream<Item = Result<Bytes>> + Sync + Send>>,
         len: Option<usize>,
     ) -> Result<()>
     where
@@ -327,22 +339,21 @@ impl Minio {
     /// # Ok(())
     /// # }
     /// ```
+    #[inline]
     pub async fn remove_object<B, K>(&self, bucket: B, key: K) -> Result<()>
     where
         B: Into<BucketArgs>,
         K: Into<KeyArgs>,
     {
-        let bucket: BucketArgs = bucket.into();
-        let key: KeyArgs = key.into();
-        self._object_executor(Method::DELETE, bucket, key, true, false)?
+        self._object_executor(Method::DELETE, bucket.into(), key.into(), true, false)?
             .send_ok()
-            .await?;
-        Ok(())
+            .await
+            .map(|_| ())
     }
 
     /// Get object information.
     ///
-    /// return Ok([Some]) if object exists and you have READ access to the object, otherwise return Ok([None])
+    /// return Ok(Some([ObjectStat])) if object exists and you have READ access to the object, otherwise return Ok([None])
     /// ## Exapmle
     /// ``` rust
     /// # use minio_rsc::Minio;
@@ -412,6 +423,20 @@ impl Minio {
             size,
             metadata,
         }))
+    }
+
+    /// Get the access control list (ACL) of an object.
+    pub async fn get_object_acl<B, K>(&self, bucket: B, key: K) -> Result<AccessControlPolicy>
+    where
+        B: Into<BucketArgs>,
+        K: Into<KeyArgs>,
+    {
+        let bucket: BucketArgs = bucket.into();
+        let key: KeyArgs = key.into();
+        self._object_executor(Method::GET, bucket, key, false, false)?
+            .query("acl", "")
+            .send_xml_ok()
+            .await
     }
 
     /// Returns true if legal hold is enabled on an object.
@@ -541,11 +566,11 @@ impl Minio {
     /// # use minio_rsc::Minio;
     /// # use minio_rsc::error::Result;
     /// # async fn example(minio: Minio)->Result<()>{
-    /// minio.delete_object_tags("bucket", "file.txt").await?;
+    /// minio.del_object_tags("bucket", "file.txt").await?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn delete_object_tags<B, K>(&self, bucket: B, key: K) -> Result<()>
+    pub async fn del_object_tags<B, K>(&self, bucket: B, key: K) -> Result<()>
     where
         B: Into<BucketArgs>,
         K: Into<KeyArgs>,
@@ -627,13 +652,11 @@ impl Minio {
     {
         let bucket: BucketArgs = bucket.into();
         let key: KeyArgs = key.into();
-        let body = request.to_xml();
-        let res = self
-            ._object_executor(Method::POST, bucket, key, true, false)?
+        self._object_executor(Method::POST, bucket, key, true, false)?
             .query_string("select&select-type=2")
-            .body(body)
+            .xml(&request)
             .send_ok()
-            .await?;
-        Ok(SelectObjectReader::new(res))
+            .await
+            .map(|res| SelectObjectReader::new(res, request.output_serialization))
     }
 }
