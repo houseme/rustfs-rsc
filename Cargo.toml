@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "rustfs-rsc"
-version = "2023.220.3"
+version = "2025.220.3"
 description = "rust for minio, api is compliant with the Amazon S3 protocol."
 readme = "README.md"
 keywords = [
